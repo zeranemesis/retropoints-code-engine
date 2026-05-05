@@ -5,7 +5,9 @@ export const config = {
   shop: process.env.SHOPIFY_SHOP,
   apiVersion: process.env.SHOPIFY_API_VERSION || '2026-04',
   adminAccessToken: process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
-  appSecret: process.env.SHOPIFY_APP_SECRET,
+  clientId: process.env.SHOPIFY_CLIENT_ID,
+  clientSecret: process.env.SHOPIFY_CLIENT_SECRET,
+  appSecret: process.env.SHOPIFY_APP_SECRET || process.env.SHOPIFY_CLIENT_SECRET,
   pointsPerEuro: Number(process.env.POINTS_PER_EURO || 5),
   pointsPerEuroDiscount: Number(process.env.POINTS_PER_EURO_DISCOUNT || 100),
   minRedeemPoints: Number(process.env.MIN_REDEEM_POINTS || 500),
@@ -16,8 +18,10 @@ export const config = {
 export function assertConfig() {
   const missing = [];
   if (!config.shop) missing.push('SHOPIFY_SHOP');
-  if (!config.adminAccessToken) missing.push('SHOPIFY_ADMIN_ACCESS_TOKEN');
-  if (!config.appSecret) missing.push('SHOPIFY_APP_SECRET');
+  if (!config.adminAccessToken && (!config.clientId || !config.clientSecret)) {
+    missing.push('SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET');
+  }
+  if (!config.appSecret) missing.push('SHOPIFY_CLIENT_SECRET');
 
   if (missing.length) {
     throw new Error(`Missing environment variables: ${missing.join(', ')}`);

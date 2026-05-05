@@ -1,9 +1,36 @@
 import { config } from './config.js';
 import { moneyFromCents } from './retropoints.js';
 
+let cachedAccessToken = null;
+let cachedAccessTokenExpiresAt = 0;
+
 function customerGid(customerId) {
   const clean = String(customerId || '').replace(/\D/g, '');
   return `gid://shopify/Customer/${clean}`;
+}
+
+async function getAdminAccessToken() {
+  if (config.adminAccessToken) return config.adminAccessToken;
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) return cachedAccessToken;
+
+  const response = await fetch(`https://${config.shop}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: config.clientId,
+      client_secret: config.clientSecret
+    })
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || !json.access_token) {
+    throw new Error(`Impossible de generer le token Admin API: ${JSON.stringify(json)}`);
+  }
+
+  cachedAccessToken = json.access_token;
+  cachedAccessTokenExpiresAt = Date.now() + Number(json.expires_in || 86399) * 1000;
+  return cachedAccessToken;
 }
 
 async function adminGraphql(query, variables = {}) {
@@ -11,7 +38,7 @@ async function adminGraphql(query, variables = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': config.adminAccessToken
+      'X-Shopify-Access-Token': await getAdminAccessToken()
     },
     body: JSON.stringify({ query, variables })
   });

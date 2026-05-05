@@ -55,6 +55,12 @@ npm run dev
 
 Remplir `.env` avec les valeurs de l'app Shopify.
 
+Avec les apps du Dev Dashboard Shopify, l'Admin API access token n'est pas affiche dans l'interface.
+L'app genere automatiquement ce token avec :
+
+- `SHOPIFY_CLIENT_ID`
+- `SHOPIFY_CLIENT_SECRET`
+
 ## Important
 
 Le fichier `data/retropoints-db.json` sert de stockage simple pour demarrer.
