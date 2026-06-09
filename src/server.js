@@ -104,7 +104,14 @@ app.post('/proxy/redeem', async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
-
+app.get('/proxy/health', (req, res) => {
+  const signed = verifyAppProxySignature(req);
+  res.json({
+    ok: signed,
+    app: 'RetroPoints Code Engine',
+    proxy: signed ? 'connected' : 'invalid_signature'
+  });
+});
 app.post('/proxy/release', async (req, res) => {
   if (!verifyAppProxySignature(req)) return res.status(401).json({ ok: false, error: 'Requete non autorisee.' });
 
