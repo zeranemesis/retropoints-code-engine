@@ -15,6 +15,10 @@ Mini-app RetroParty pour automatiser les points sans Shopify Plus.
 
 ## Routes
 
+- `GET /auth/install?shop=your-shop.myshopify.com`
+  - Lance l'installation Shopify de l'app sur la boutique
+- `GET /auth/callback`
+  - Callback OAuth autorise dans le Dev Dashboard
 - `POST /proxy/redeem`
   - App Proxy cible depuis le theme : `/apps/retropoints/redeem`
 - `POST /proxy/release`
@@ -60,6 +64,12 @@ L'app genere automatiquement ce token avec :
 
 - `SHOPIFY_CLIENT_ID`
 - `SHOPIFY_CLIENT_SECRET`
+
+Installation manuelle :
+
+```txt
+https://ton-app-render.onrender.com/auth/install?shop=your-shop.myshopify.com
+```
 
 ## Important
 
