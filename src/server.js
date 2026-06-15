@@ -20,6 +20,7 @@ import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, save
 
 assertConfig();
 
+const APP_VERSION = '2026-06-15-auto-metafields';
 const app = express();
 app.set('trust proxy', 1);
 
@@ -56,7 +57,7 @@ app.post('/webhooks/orders-paid', express.raw({ type: 'application/json' }), asy
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, app: 'RetroPoints Code Engine' });
+  res.json({ ok: true, app: 'RetroPoints Code Engine', version: APP_VERSION });
 });
 
 app.get('/', (req, res) => {
@@ -118,10 +119,26 @@ app.get('/auth/callback', async (req, res) => {
     scope: token.scope || config.scopes
   });
 
+  let metafieldsStatus = '<p>Creation des champs meta : non testee.</p>';
+
+  try {
+    const results = await createCustomerMetafieldDefinitions();
+    const hasError = results.some((result) => result.status === 'error');
+    const labels = results.map((result) => `${result.key}: ${result.status}`).join(', ');
+
+    metafieldsStatus = hasError
+      ? `<p>Champs meta RetroPoints : une erreur est a corriger (${labels}).</p>`
+      : `<p>Champs meta RetroPoints : OK (${labels}).</p>`;
+  } catch (error) {
+    metafieldsStatus = `<p>Champs meta RetroPoints : erreur ${String(error.message || error)}</p>`;
+  }
+
   res.type('html').send(`
     <main style="font-family:system-ui,sans-serif;padding:32px;line-height:1.5">
       <h1>RetroPoints installe</h1>
       <p>L'application est maintenant installee sur ${shop}.</p>
+      ${metafieldsStatus}
+      <p>Version serveur : ${APP_VERSION}</p>
       <p><a href="https://${shop}/apps/retropoints/health">Tester le proxy RetroPoints</a></p>
     </main>
   `);
@@ -135,12 +152,14 @@ app.get('/setup/metafields', async (_req, res) => {
     res.status(hasError ? 500 : 200).json({
       ok: !hasError,
       app: 'RetroPoints Code Engine',
+      version: APP_VERSION,
       ownerType: 'CUSTOMER',
       definitions: results
     });
   } catch (error) {
     res.status(500).json({
       ok: false,
+      version: APP_VERSION,
       error: error.message
     });
   }

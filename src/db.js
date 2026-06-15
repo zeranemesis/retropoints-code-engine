@@ -40,6 +40,15 @@ export async function getInstallation(shop) {
   return db.installations?.[shop] || null;
 }
 
+export async function getLatestInstallation() {
+  const db = await readDb();
+  const installations = Object.values(db.installations || {});
+
+  return installations.sort((a, b) => {
+    return new Date(b.installedAt || 0) - new Date(a.installedAt || 0);
+  })[0] || null;
+}
+
 export async function findPendingRedemptionByCode(code) {
   const db = await readDb();
   return (db.redemptions || []).find((item) => item.code === code && item.status === 'pending');

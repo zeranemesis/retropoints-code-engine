@@ -1,21 +1,46 @@
 import { config } from './config.js';
 import { moneyFromCents } from './retropoints.js';
-import { getInstallation } from './db.js';
+import { getInstallation, getLatestInstallation } from './db.js';
 
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
+let cachedShop = null;
 
 function customerGid(customerId) {
   const clean = String(customerId || '').replace(/\D/g, '');
   return `gid://shopify/Customer/${clean}`;
 }
 
-async function getAdminAccessToken() {
-  if (config.adminAccessToken) return config.adminAccessToken;
-  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) return cachedAccessToken;
+async function getAdminSession() {
+  if (config.adminAccessToken) {
+    return {
+      shop: config.shop,
+      accessToken: config.adminAccessToken
+    };
+  }
 
-  const installation = await getInstallation(config.shop);
-  if (installation?.accessToken) return installation.accessToken;
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) {
+    return {
+      shop: cachedShop || config.shop,
+      accessToken: cachedAccessToken
+    };
+  }
+
+  const configuredInstallation = await getInstallation(config.shop);
+  const latestInstallation = configuredInstallation?.accessToken
+    ? configuredInstallation
+    : await getLatestInstallation();
+
+  if (latestInstallation?.accessToken) {
+    cachedShop = latestInstallation.shop || config.shop;
+    cachedAccessToken = latestInstallation.accessToken;
+    cachedAccessTokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
+
+    return {
+      shop: cachedShop,
+      accessToken: cachedAccessToken
+    };
+  }
 
   const response = await fetch(`https://${config.shop}/admin/oauth/access_token`, {
     method: 'POST',
@@ -29,20 +54,26 @@ async function getAdminAccessToken() {
 
   const json = await response.json().catch(() => ({}));
   if (!response.ok || !json.access_token) {
-    throw new Error(`Impossible de generer le token Admin API: ${JSON.stringify(json)}`);
+    throw new Error(`Aucune installation Shopify active trouvee. Relance /auth/install puis reessaie /setup/metafields. Reponse Shopify: ${JSON.stringify(json)}`);
   }
 
+  cachedShop = config.shop;
   cachedAccessToken = json.access_token;
   cachedAccessTokenExpiresAt = Date.now() + Number(json.expires_in || 86399) * 1000;
-  return cachedAccessToken;
+
+  return {
+    shop: cachedShop,
+    accessToken: cachedAccessToken
+  };
 }
 
 async function adminGraphql(query, variables = {}) {
-  const response = await fetch(`https://${config.shop}/admin/api/${config.apiVersion}/graphql.json`, {
+  const session = await getAdminSession();
+  const response = await fetch(`https://${session.shop}/admin/api/${config.apiVersion}/graphql.json`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': await getAdminAccessToken()
+      'X-Shopify-Access-Token': session.accessToken
     },
     body: JSON.stringify({ query, variables })
   });
