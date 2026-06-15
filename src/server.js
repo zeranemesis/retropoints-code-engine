@@ -10,7 +10,12 @@ import {
   verifyWebhookHmac
 } from './security.js';
 import { calculatePointsFromCents, calculateRedeemable, tierFromLifetimePoints } from './retropoints.js';
-import { createRetroPointsDiscount, getCustomerPoints, setCustomerPoints } from './shopify-admin.js';
+import {
+  createCustomerMetafieldDefinitions,
+  createRetroPointsDiscount,
+  getCustomerPoints,
+  setCustomerPoints
+} from './shopify-admin.js';
 import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, saveRedemption } from './db.js';
 
 assertConfig();
@@ -120,6 +125,25 @@ app.get('/auth/callback', async (req, res) => {
       <p><a href="https://${shop}/apps/retropoints/health">Tester le proxy RetroPoints</a></p>
     </main>
   `);
+});
+
+app.get('/setup/metafields', async (_req, res) => {
+  try {
+    const results = await createCustomerMetafieldDefinitions();
+    const hasError = results.some((result) => result.status === 'error');
+
+    res.status(hasError ? 500 : 200).json({
+      ok: !hasError,
+      app: 'RetroPoints Code Engine',
+      ownerType: 'CUSTOMER',
+      definitions: results
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
 });
 
 app.post('/proxy/redeem', async (req, res) => {

@@ -19,6 +19,8 @@ Mini-app RetroParty pour automatiser les points sans Shopify Plus.
   - Lance l'installation Shopify de l'app sur la boutique
 - `GET /auth/callback`
   - Callback OAuth autorise dans le Dev Dashboard
+- `GET /setup/metafields`
+  - Cree les definitions de champs meta clients RetroPoints
 - `POST /proxy/redeem`
   - App Proxy cible depuis le theme : `/apps/retropoints/redeem`
 - `POST /proxy/release`

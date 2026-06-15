@@ -104,6 +104,76 @@ export async function setCustomerPoints(customerId, { points, lifetimePoints, ti
   return data.metafieldsSet.metafields;
 }
 
+export async function createCustomerMetafieldDefinitions() {
+  const definitions = [
+    {
+      name: 'RetroPoints disponibles',
+      namespace: 'retroparty',
+      key: 'points',
+      description: 'Solde de points fidelite disponibles pour le client.',
+      type: 'number_integer',
+      ownerType: 'CUSTOMER'
+    },
+    {
+      name: 'RetroPoints cumules',
+      namespace: 'retroparty',
+      key: 'lifetime_points',
+      description: 'Total des points fidelite cumules par le client.',
+      type: 'number_integer',
+      ownerType: 'CUSTOMER'
+    },
+    {
+      name: 'Palier RetroPoints',
+      namespace: 'retroparty',
+      key: 'tier',
+      description: 'Palier fidelite du client : Bronze, Silver ou Gold.',
+      type: 'single_line_text_field',
+      ownerType: 'CUSTOMER'
+    }
+  ];
+
+  const results = [];
+
+  for (const definition of definitions) {
+    const data = await adminGraphql(
+      `#graphql
+      mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+        metafieldDefinitionCreate(definition: $definition) {
+          createdDefinition {
+            id
+            name
+            namespace
+            key
+          }
+          userErrors {
+            field
+            message
+            code
+          }
+        }
+      }`,
+      { definition }
+    );
+
+    const payload = data.metafieldDefinitionCreate;
+    const alreadyExists = payload.userErrors.some((error) => {
+      const message = String(error.message || '').toLowerCase();
+      const code = String(error.code || '').toLowerCase();
+      return message.includes('already') || message.includes('taken') || code.includes('taken');
+    });
+
+    if (payload.createdDefinition) {
+      results.push({ key: definition.key, status: 'created', definition: payload.createdDefinition });
+    } else if (alreadyExists) {
+      results.push({ key: definition.key, status: 'already_exists' });
+    } else {
+      results.push({ key: definition.key, status: 'error', errors: payload.userErrors });
+    }
+  }
+
+  return results;
+}
+
 export async function createRetroPointsDiscount({ customerId, code, discountCents, expiresAt }) {
   const amount = moneyFromCents(discountCents);
   const startsAt = new Date().toISOString();
