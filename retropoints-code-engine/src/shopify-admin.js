@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { moneyFromCents } from './retropoints.js';
+import { getInstallation } from './db.js';
 
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
@@ -12,6 +13,9 @@ function customerGid(customerId) {
 async function getAdminAccessToken() {
   if (config.adminAccessToken) return config.adminAccessToken;
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) return cachedAccessToken;
+
+  const installation = await getInstallation(config.shop);
+  if (installation?.accessToken) return installation.accessToken;
 
   const response = await fetch(`https://${config.shop}/admin/oauth/access_token`, {
     method: 'POST',

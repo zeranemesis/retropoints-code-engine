@@ -24,6 +24,22 @@ export async function saveRedemption(redemption) {
   return redemption;
 }
 
+export async function saveInstallation(installation) {
+  const db = await readDb();
+  db.installations = db.installations || {};
+  db.installations[installation.shop] = {
+    ...installation,
+    installedAt: new Date().toISOString()
+  };
+  await writeDb(db);
+  return db.installations[installation.shop];
+}
+
+export async function getInstallation(shop) {
+  const db = await readDb();
+  return db.installations?.[shop] || null;
+}
+
 export async function findPendingRedemptionByCode(code) {
   const db = await readDb();
   return (db.redemptions || []).find((item) => item.code === code && item.status === 'pending');
