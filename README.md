@@ -1,4 +1,4 @@
-# RetroPoints Code Engine
+﻿# RetroPoints Code Engine
 
 Mini-app RetroParty pour automatiser les points sans Shopify Plus.
 
@@ -12,6 +12,13 @@ Mini-app RetroParty pour automatiser les points sans Shopify Plus.
 - Renvoie le code au theme.
 - Le theme applique le code au panier via `/cart/update.js`.
 - Le webhook `orders/paid` deduit les points utilises et ajoute les points gagnes.
+
+## Regle RetroPoints
+
+- 1 EUR achete = 5 points.
+- 100 EUR achetes = 500 points.
+- 500 points = 5 EUR de remise.
+- Le premier bon est utilisable a partir de 500 points.
 
 ## Routes
 

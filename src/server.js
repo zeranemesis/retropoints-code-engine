@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import { assertConfig, config } from './config.js';
 import {
   createInstallState,
@@ -20,7 +20,7 @@ import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, save
 
 assertConfig();
 
-const APP_VERSION = '2026-06-15-auto-metafields';
+const APP_VERSION = '2026-06-25-100eur-5eur';
 const app = express();
 app.set('trust proxy', 1);
 
