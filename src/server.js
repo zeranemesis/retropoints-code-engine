@@ -1,10 +1,12 @@
-﻿import express from 'express';
+import express from 'express';
 import { assertConfig, config } from './config.js';
 import {
   createInstallState,
+  customerIdFromSessionClaims,
   isValidShopDomain,
   makeCode,
   verifyAppProxySignature,
+  verifyCustomerAccountSessionToken,
   verifyInstallState,
   verifyOAuthHmac,
   verifyWebhookHmac
@@ -20,9 +22,16 @@ import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, save
 
 assertConfig();
 
-const APP_VERSION = '2026-06-25-100eur-5eur';
+const APP_VERSION = '2026-06-25-customer-account-points';
 const app = express();
 app.set('trust proxy', 1);
+function setCustomerAccountCors(req, res) {
+  const origin = req.get('origin') || '*';
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Vary', 'Origin');
+  res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+}
 
 app.post('/webhooks/orders-paid', express.raw({ type: 'application/json' }), async (req, res) => {
   if (!verifyWebhookHmac(req)) return res.status(401).send('Invalid webhook HMAC');
@@ -144,6 +153,33 @@ app.get('/auth/callback', async (req, res) => {
   `);
 });
 
+
+app.options('/customer-account/points', (req, res) => {
+  setCustomerAccountCors(req, res);
+  res.status(204).send('');
+});
+
+app.get('/customer-account/points', async (req, res) => {
+  setCustomerAccountCors(req, res);
+
+  const token = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return res.status(401).json({ ok: false, error: 'Connexion client requise.' });
+
+  try {
+    const claims = verifyCustomerAccountSessionToken(token);
+    const customerId = customerIdFromSessionClaims(claims);
+    const customer = await getCustomerPoints(customerId);
+
+    res.json({
+      ok: true,
+      points: customer.points,
+      lifetimePoints: customer.lifetimePoints,
+      tier: customer.tier
+    });
+  } catch (error) {
+    res.status(401).json({ ok: false, error: error.message });
+  }
+});
 app.get('/setup/metafields', async (_req, res) => {
   try {
     const results = await createCustomerMetafieldDefinitions();

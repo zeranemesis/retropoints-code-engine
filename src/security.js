@@ -94,6 +94,65 @@ export function verifyWebhookHmac(req) {
   return safeCompare(computed, hmac);
 }
 
+function decodeJwtPart(part) {
+  return JSON.parse(Buffer.from(String(part || ''), 'base64url').toString('utf8'));
+}
+
+export function verifyCustomerAccountSessionToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3 || !config.appSecret) {
+    throw new Error('Jeton client invalide.');
+  }
+
+  const [headerPart, payloadPart, signature] = parts;
+  const header = decodeJwtPart(headerPart);
+  if (header.alg !== 'HS256') {
+    throw new Error('Signature du jeton client non supportee.');
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', config.appSecret)
+    .update(`${headerPart}.${payloadPart}`)
+    .digest('base64url');
+
+  if (!safeCompare(expectedSignature, signature)) {
+    throw new Error('Signature du jeton client invalide.');
+  }
+
+  const claims = decodeJwtPart(payloadPart);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (claims.aud && claims.aud !== config.clientId) {
+    throw new Error('Jeton client destine a une autre application.');
+  }
+
+  if (claims.exp && Number(claims.exp) < now - 30) {
+    throw new Error('Jeton client expire.');
+  }
+
+  if (claims.nbf && Number(claims.nbf) > now + 30) {
+    throw new Error('Jeton client pas encore valide.');
+  }
+
+  return claims;
+}
+
+export function customerIdFromSessionClaims(claims) {
+  const candidates = [
+    claims?.sub,
+    claims?.customer_id,
+    claims?.customerId,
+    claims?.customer?.id
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const value = String(candidate);
+    const match = value.match(/Customer\/(\d+)/) || value.match(/^(\d+)$/);
+    if (match) return match[1];
+  }
+
+  throw new Error('Client introuvable dans le jeton.');
+}
 export function makeCode(customerId, amountCents) {
   const amount = Math.floor(amountCents / 100);
   const suffix = crypto.randomBytes(4).toString('hex').toUpperCase();
