@@ -24,7 +24,7 @@ import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, save
 
 assertConfig();
 
-const APP_VERSION = '2026-06-27-webhook-and-account-fix';
+const APP_VERSION = '2026-06-27-webhook-usererrors-fix';
 const app = express();
 app.set('trust proxy', 1);
 

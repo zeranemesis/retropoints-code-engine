@@ -208,28 +208,22 @@ export async function createCustomerMetafieldDefinitions() {
 export async function createOrdersPaidWebhookSubscription(callbackUrl) {
   const data = await adminGraphql(
     `#graphql
-    mutation CreateOrdersPaidWebhook($callbackUrl: URL!) {
+    mutation CreateOrdersPaidWebhook($callbackUrl: String!) {
       webhookSubscriptionCreate(
         topic: ORDERS_PAID,
         webhookSubscription: {
-          callbackUrl: $callbackUrl,
+          uri: $callbackUrl,
           format: JSON
         }
       ) {
         webhookSubscription {
           id
           topic
-          endpoint {
-            __typename
-            ... on WebhookHttpEndpoint {
-              callbackUrl
-            }
-          }
+          uri
         }
         userErrors {
           field
           message
-          code
         }
       }
     }`,
@@ -239,8 +233,7 @@ export async function createOrdersPaidWebhookSubscription(callbackUrl) {
   const payload = data.webhookSubscriptionCreate;
   const alreadyExists = payload.userErrors.some((error) => {
     const message = String(error.message || '').toLowerCase();
-    const code = String(error.code || '').toLowerCase();
-    return message.includes('already') || message.includes('taken') || code.includes('taken');
+    return message.includes('already') || message.includes('taken');
   });
 
   if (payload.webhookSubscription) {
