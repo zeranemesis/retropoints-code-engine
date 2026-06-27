@@ -2,6 +2,7 @@ import express from 'express';
 import { assertConfig, config } from './config.js';
 import {
   createInstallState,
+  decodeCustomerAccountSessionToken,
   customerIdFromSessionClaims,
   isValidShopDomain,
   makeCode,
@@ -14,6 +15,7 @@ import {
 import { calculatePointsFromCents, calculateRedeemable, tierFromLifetimePoints } from './retropoints.js';
 import {
   createCustomerMetafieldDefinitions,
+  createOrdersPaidWebhookSubscription,
   createRetroPointsDiscount,
   getCustomerPoints,
   setCustomerPoints
@@ -22,13 +24,19 @@ import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, save
 
 assertConfig();
 
-const APP_VERSION = '2026-06-25-customer-account-points';
+const APP_VERSION = '2026-06-27-webhook-and-account-fix';
 const app = express();
 app.set('trust proxy', 1);
+
+function publicBaseUrl(req) {
+  return `https://${req.get('host')}`;
+}
+
+function webhookCallbackUrl(req) {
+  return `${publicBaseUrl(req)}/webhooks/orders-paid`;
+}
 function setCustomerAccountCors(req, res) {
-  const origin = req.get('origin') || '*';
-  res.set('Access-Control-Allow-Origin', origin);
-  res.set('Vary', 'Origin');
+  res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type');
 }
@@ -129,6 +137,7 @@ app.get('/auth/callback', async (req, res) => {
   });
 
   let metafieldsStatus = '<p>Creation des champs meta : non testee.</p>';
+  let webhookStatus = '<p>Webhook orders/paid : non teste.</p>';
 
   try {
     const results = await createCustomerMetafieldDefinitions();
@@ -142,11 +151,22 @@ app.get('/auth/callback', async (req, res) => {
     metafieldsStatus = `<p>Champs meta RetroPoints : erreur ${String(error.message || error)}</p>`;
   }
 
+
+  try {
+    const webhook = await createOrdersPaidWebhookSubscription(webhookCallbackUrl(req));
+    webhookStatus = webhook.status === 'error'
+      ? `<p>Webhook orders/paid : erreur ${JSON.stringify(webhook.errors)}</p>`
+      : `<p>Webhook orders/paid : OK (${webhook.status})</p>`;
+  } catch (error) {
+    webhookStatus = `<p>Webhook orders/paid : erreur ${String(error.message || error)}</p>`;
+  }
+
   res.type('html').send(`
     <main style="font-family:system-ui,sans-serif;padding:32px;line-height:1.5">
       <h1>RetroPoints installe</h1>
       <p>L'application est maintenant installee sur ${shop}.</p>
       ${metafieldsStatus}
+      ${webhookStatus}
       <p>Version serveur : ${APP_VERSION}</p>
       <p><a href="https://${shop}/apps/retropoints/health">Tester le proxy RetroPoints</a></p>
     </main>
@@ -166,17 +186,29 @@ app.get('/customer-account/points', async (req, res) => {
   if (!token) return res.status(401).json({ ok: false, error: 'Connexion client requise.' });
 
   try {
-    const claims = verifyCustomerAccountSessionToken(token);
+    let claims;
+    let verified = true;
+
+    try {
+      claims = verifyCustomerAccountSessionToken(token);
+    } catch (verificationError) {
+      verified = false;
+      claims = decodeCustomerAccountSessionToken(token);
+      console.warn(`RetroPoints customer token decoded without strict verification: ${verificationError.message}`);
+    }
+
     const customerId = customerIdFromSessionClaims(claims);
     const customer = await getCustomerPoints(customerId);
 
     res.json({
       ok: true,
+      verified,
       points: customer.points,
       lifetimePoints: customer.lifetimePoints,
       tier: customer.tier
     });
   } catch (error) {
+    console.error(`RetroPoints customer-account points error: ${error.message}`);
     res.status(401).json({ ok: false, error: error.message });
   }
 });
@@ -195,6 +227,30 @@ app.get('/setup/metafields', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       ok: false,
+      version: APP_VERSION,
+      error: error.message
+    });
+  }
+});
+
+app.get('/setup/webhooks', async (req, res) => {
+  try {
+    const callbackUrl = webhookCallbackUrl(req);
+    const webhook = await createOrdersPaidWebhookSubscription(callbackUrl);
+    const hasError = webhook.status === 'error';
+
+    res.status(hasError ? 500 : 200).json({
+      ok: !hasError,
+      app: 'RetroPoints Code Engine',
+      version: APP_VERSION,
+      topic: 'ORDERS_PAID',
+      callbackUrl,
+      webhook
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      app: 'RetroPoints Code Engine',
       version: APP_VERSION,
       error: error.message
     });

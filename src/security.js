@@ -98,6 +98,14 @@ function decodeJwtPart(part) {
   return JSON.parse(Buffer.from(String(part || ''), 'base64url').toString('utf8'));
 }
 
+export function decodeCustomerAccountSessionToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length < 2) {
+    throw new Error('Jeton client invalide.');
+  }
+
+  return decodeJwtPart(parts[1]);
+}
 export function verifyCustomerAccountSessionToken(token) {
   const parts = String(token || '').split('.');
   if (parts.length !== 3 || !config.appSecret) {

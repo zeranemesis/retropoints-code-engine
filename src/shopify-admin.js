@@ -205,6 +205,54 @@ export async function createCustomerMetafieldDefinitions() {
   return results;
 }
 
+export async function createOrdersPaidWebhookSubscription(callbackUrl) {
+  const data = await adminGraphql(
+    `#graphql
+    mutation CreateOrdersPaidWebhook($callbackUrl: URL!) {
+      webhookSubscriptionCreate(
+        topic: ORDERS_PAID,
+        webhookSubscription: {
+          callbackUrl: $callbackUrl,
+          format: JSON
+        }
+      ) {
+        webhookSubscription {
+          id
+          topic
+          endpoint {
+            __typename
+            ... on WebhookHttpEndpoint {
+              callbackUrl
+            }
+          }
+        }
+        userErrors {
+          field
+          message
+          code
+        }
+      }
+    }`,
+    { callbackUrl }
+  );
+
+  const payload = data.webhookSubscriptionCreate;
+  const alreadyExists = payload.userErrors.some((error) => {
+    const message = String(error.message || '').toLowerCase();
+    const code = String(error.code || '').toLowerCase();
+    return message.includes('already') || message.includes('taken') || code.includes('taken');
+  });
+
+  if (payload.webhookSubscription) {
+    return { status: 'created', webhook: payload.webhookSubscription };
+  }
+
+  if (alreadyExists) {
+    return { status: 'already_exists', callbackUrl };
+  }
+
+  return { status: 'error', errors: payload.userErrors };
+}
 export async function createRetroPointsDiscount({ customerId, code, discountCents, expiresAt }) {
   const amount = moneyFromCents(discountCents);
   const startsAt = new Date().toISOString();
