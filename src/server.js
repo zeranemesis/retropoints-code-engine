@@ -20,12 +20,13 @@ import {
   getCustomerPoints,
   setCustomerPoints
 } from './shopify-admin.js';
-import { findPendingRedemptionByCode, markRedemptionUsed, saveInstallation, saveRedemption } from './db.js';
+import { failOrderProcessing, findPendingRedemptionByCode, finishOrderProcessing, markRedemptionUsed, saveInstallation, saveRedemption, startOrderProcessing } from './db.js';
 
 assertConfig();
 
-const APP_VERSION = '2026-06-27-webhook-usererrors-fix';
+const APP_VERSION = '2026-07-01-order-idempotency-fix';
 const app = express();
+const processingOrderIds = new Set();
 app.set('trust proxy', 1);
 
 function publicBaseUrl(req) {
@@ -45,36 +46,84 @@ app.post('/webhooks/orders-paid', express.raw({ type: 'application/json' }), asy
   if (!verifyWebhookHmac(req)) return res.status(401).send('Invalid webhook HMAC');
 
   const order = JSON.parse(req.body.toString('utf8'));
+  const orderId = String(order.admin_graphql_api_id || order.id || order.name || '').trim();
   const customerId = order.customer?.id;
+
+  if (!orderId) return res.status(200).send('No order id');
   if (!customerId) return res.status(200).send('No customer');
 
-  const usedCode = (order.discount_codes || [])
-    .map((discount) => discount.code)
-    .find((code) => code && code.startsWith('RP-'));
+  if (processingOrderIds.has(orderId)) {
+    return res.status(200).send('Order already processing');
+  }
 
-  const redemption = usedCode ? await findPendingRedemptionByCode(usedCode) : null;
-  const current = await getCustomerPoints(customerId);
+  processingOrderIds.add(orderId);
 
-  const earnedPoints = calculatePointsFromCents(Math.round(Number(order.total_price || 0) * 100));
-  const pointsAfterRedemption = redemption ? Math.max(0, current.points - redemption.pointsUsed) : current.points;
-  const newPoints = pointsAfterRedemption + earnedPoints;
-  const newLifetime = current.lifetimePoints + earnedPoints;
-  const newTier = tierFromLifetimePoints(newLifetime);
+  try {
+    const processing = await startOrderProcessing(orderId, {
+      orderName: order.name || '',
+      customerId: String(customerId),
+      totalPrice: String(order.total_price || '0')
+    });
 
-  await setCustomerPoints(customerId, {
-    points: newPoints,
-    lifetimePoints: newLifetime,
-    tier: newTier
-  });
+    if (!processing.started) {
+      return res.status(200).send('Order already processed');
+    }
 
-  if (redemption) await markRedemptionUsed(usedCode, order.id);
-  res.status(200).send('OK');
+    const usedCode = (order.discount_codes || [])
+      .map((discount) => discount.code)
+      .find((code) => code && code.startsWith('RP-'));
+
+    const redemption = usedCode ? await findPendingRedemptionByCode(usedCode) : null;
+    const current = await getCustomerPoints(customerId);
+
+    const earnedPoints = calculatePointsFromCents(Math.round(Number(order.total_price || 0) * 100));
+    const pointsAfterRedemption = redemption ? Math.max(0, current.points - redemption.pointsUsed) : current.points;
+    const newPoints = pointsAfterRedemption + earnedPoints;
+    const newLifetime = current.lifetimePoints + earnedPoints;
+    const newTier = tierFromLifetimePoints(newLifetime);
+
+    await setCustomerPoints(customerId, {
+      points: newPoints,
+      lifetimePoints: newLifetime,
+      tier: newTier
+    });
+
+    if (redemption) await markRedemptionUsed(usedCode, order.id);
+
+    await finishOrderProcessing(orderId, {
+      orderName: order.name || '',
+      customerId: String(customerId),
+      earnedPoints,
+      pointsBefore: current.points,
+      pointsAfter: newPoints,
+      lifetimePointsBefore: current.lifetimePoints,
+      lifetimePointsAfter: newLifetime,
+      redemptionCode: usedCode || null
+    });
+
+    res.status(200).send('OK');
+  } catch (error) {
+    await failOrderProcessing(orderId, error);
+    console.error(`RetroPoints orders-paid webhook error for ${orderId}: ${error.message}`);
+    res.status(500).send('RetroPoints webhook error');
+  } finally {
+    processingOrderIds.delete(orderId);
+  }
 });
-
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, app: 'RetroPoints Code Engine', version: APP_VERSION });
+  res.json({
+    ok: true,
+    app: 'RetroPoints Code Engine',
+    version: APP_VERSION,
+    rules: {
+      pointsPerEuro: config.pointsPerEuro,
+      pointsPerEuroDiscount: config.pointsPerEuroDiscount,
+      minRedeemPoints: config.minRedeemPoints,
+      redeemStepPoints: config.redeemStepPoints
+    }
+  });
 });
 
 app.get('/', (req, res) => {
