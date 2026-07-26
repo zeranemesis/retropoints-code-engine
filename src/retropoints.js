@@ -26,3 +26,13 @@ export function tierFromLifetimePoints(lifetimePoints) {
   if (lifetimePoints >= 1000) return 'Silver';
   return 'Bronze';
 }
+
+
+export function evaluateDiscountCombination(codes = []) {
+  const externalCodes = codes.filter(code => !String(code).startsWith('RP-'));
+  return {
+    combinable: externalCodes.length === 0,
+    incompatibleCodes: externalCodes
+  };
+}
+

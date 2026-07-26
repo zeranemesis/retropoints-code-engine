@@ -1,4 +1,4 @@
-import { config } from './config.js';
+﻿import { config } from './config.js';
 import { moneyFromCents } from './retropoints.js';
 import { getInstallation, getLatestInstallation } from './db.js';
 
@@ -305,3 +305,61 @@ export async function createRetroPointsDiscount({ customerId, code, discountCent
 
   return payload.codeDiscountNode.id;
 }
+
+
+export async function deleteRetroPointsDiscount(discountNodeId) {
+  if (!discountNodeId) return { deleted: false, reason: 'missing_id' };
+
+  const data = await adminGraphql(
+    `#graphql
+    mutation DeleteRetroPointsDiscount($id: ID!) {
+      discountCodeBasicDelete(id: $id) {
+        deletedCodeDiscountId
+        userErrors { field message code }
+      }
+    }`,
+    { id: discountNodeId }
+  );
+
+  const payload = data.discountCodeBasicDelete;
+  if (payload.userErrors?.length) {
+    const message = payload.userErrors.map(error => error.message).join(', ');
+    if (/not found|does not exist|invalid/i.test(message)) return { deleted: true, reason: 'already_missing' };
+    throw new Error(message);
+  }
+  return { deleted: Boolean(payload.deletedCodeDiscountId), reason: 'deleted' };
+}
+
+
+
+
+export async function createOrdersCancelledWebhookSubscription(callbackUrl) {
+  return createWebhookSubscriptionForTopic('ORDERS_CANCELLED', callbackUrl);
+}
+
+export async function createRefundsCreateWebhookSubscription(callbackUrl) {
+  return createWebhookSubscriptionForTopic('REFUNDS_CREATE', callbackUrl);
+}
+
+async function createWebhookSubscriptionForTopic(topic, callbackUrl) {
+  const data = await adminGraphql(
+    `#graphql
+    mutation CreateRetroPointsWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: String!) {
+      webhookSubscriptionCreate(
+        topic: $topic,
+        webhookSubscription: { uri: $callbackUrl, format: JSON }
+      ) {
+        webhookSubscription { id topic uri }
+        userErrors { field message }
+      }
+    }`,
+    { topic, callbackUrl }
+  );
+  const payload = data.webhookSubscriptionCreate;
+  if (payload.webhookSubscription) return { status: 'created', webhook: payload.webhookSubscription };
+  const message = (payload.userErrors || []).map(error => error.message).join(', ');
+  if (/already|taken|exists/i.test(message)) return { status: 'already_exists', callbackUrl, topic };
+  return { status: 'error', errors: payload.userErrors || [] };
+}
+
+
