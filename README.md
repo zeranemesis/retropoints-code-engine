@@ -1,4 +1,4 @@
-﻿# RetroPoints Code Engine
+# RetroPoints Code Engine
 
 Backend de fidélité RetroParty pour Shopify App Proxy.
 
@@ -156,7 +156,7 @@ Réponse de santé attendue :
 ```json
 {
   "ok": true,
-  "version": "2026-07-26-production-hardening",
+  "version": "2026-08-01-discount-release-fix",
   "rules": {
     "pointsPerEuro": 5,
     "pointsPerEuroDiscount": 100,

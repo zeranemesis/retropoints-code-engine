@@ -1,4 +1,4 @@
-﻿import { config } from './config.js';
+import { config } from './config.js';
 import { moneyFromCents } from './retropoints.js';
 import { getInstallation, getLatestInstallation } from './db.js';
 
@@ -313,7 +313,7 @@ export async function deleteRetroPointsDiscount(discountNodeId) {
   const data = await adminGraphql(
     `#graphql
     mutation DeleteRetroPointsDiscount($id: ID!) {
-      discountCodeBasicDelete(id: $id) {
+      discountCodeDelete(id: $id) {
         deletedCodeDiscountId
         userErrors { field message code }
       }
@@ -321,7 +321,7 @@ export async function deleteRetroPointsDiscount(discountNodeId) {
     { id: discountNodeId }
   );
 
-  const payload = data.discountCodeBasicDelete;
+  const payload = data.discountCodeDelete;
   if (payload.userErrors?.length) {
     const message = payload.userErrors.map(error => error.message).join(', ');
     if (/not found|does not exist|invalid/i.test(message)) return { deleted: true, reason: 'already_missing' };

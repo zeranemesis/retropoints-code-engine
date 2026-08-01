@@ -51,7 +51,7 @@ import {
 
 assertConfig();
 
-export const APP_VERSION = '2026-07-26-production-hardening';
+export const APP_VERSION = '2026-08-01-discount-release-fix';
 export const app = express();
 const rateBuckets = new Map();
 const processingOrderIds = new Set();
