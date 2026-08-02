@@ -37,3 +37,37 @@ test('la suppression RetroPoints utilise discountCodeDelete', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+test('le journal de commande RetroPoints est lu et ecrit sur la commande Shopify', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push({ url: String(url), body });
+    const isRead = body.query.includes('query RetroPointsOrderLedger');
+    return {
+      ok: true,
+      json: async () => ({
+        data: isRead
+          ? { order: { id: 'gid://shopify/Order/42', ledger: { value: '{"status":"credited","earnedPoints":550}' } } }
+          : { metafieldsSet: { metafields: [{ id: 'gid://shopify/Metafield/1', key: 'points_ledger', value: '{"status":"credited"}' }], userErrors: [] } }
+      })
+    };
+  };
+
+  try {
+    const { getOrderPointsLedger, setOrderPointsLedger } = await import('../src/shopify-admin.js?ledger-test');
+    const ledger = await getOrderPointsLedger('42');
+    const result = await setOrderPointsLedger('gid://shopify/Order/42', { status: 'crediting', earnedPoints: 550 });
+
+    assert.equal(ledger.status, 'credited');
+    assert.equal(ledger.earnedPoints, 550);
+    assert.equal(result.key, 'points_ledger');
+    assert.match(requests[0].body.query, /order\(id: \$id\)/);
+    assert.equal(requests[0].body.variables.id, 'gid://shopify/Order/42');
+    assert.match(requests[1].body.query, /metafieldsSet/);
+    assert.equal(requests[1].body.variables.metafields[0].ownerId, 'gid://shopify/Order/42');
+    assert.equal(requests[1].body.variables.metafields[0].type, 'json');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

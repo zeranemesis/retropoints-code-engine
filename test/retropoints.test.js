@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import test from 'node:test';
@@ -55,6 +55,7 @@ test('signature invalide, timestamp expire et client absent refuses', () => {
 
 test('calcul 100 euros = 500 points = 5 euros', () => {
   assert.equal(points.calculatePointsFromCents(8200), 410);
+  assert.equal(points.calculatePointsFromCents(11000), 550);
   const redeemable = points.calculateRedeemable({ availablePoints: 820, cartTotalCents: 8200 });
   assert.equal(redeemable.pointsUsed, 800);
   assert.equal(redeemable.discountCents, 800);

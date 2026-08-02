@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 
 export const config = {
   port: Number(process.env.PORT || 3000),
@@ -10,7 +10,7 @@ export const config = {
   clientId: process.env.SHOPIFY_CLIENT_ID,
   clientSecret: process.env.SHOPIFY_CLIENT_SECRET,
   appSecret: process.env.SHOPIFY_APP_SECRET || process.env.SHOPIFY_CLIENT_SECRET,
-  scopes: process.env.SHOPIFY_SCOPES || 'write_app_proxy,read_customers,write_customers,read_discounts,write_discounts,read_orders',
+  scopes: process.env.SHOPIFY_SCOPES || 'write_app_proxy,read_customers,write_customers,read_discounts,write_discounts,read_orders,write_orders',
   pointsPerEuro: Number(process.env.POINTS_PER_EURO || 5),
   pointsPerEuroDiscount: Number(process.env.POINTS_PER_EURO_DISCOUNT || 100),
   minRedeemPoints: Number(process.env.MIN_REDEEM_POINTS || 500),

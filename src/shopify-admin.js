@@ -11,6 +11,14 @@ function customerGid(customerId) {
   return `gid://shopify/Customer/${clean}`;
 }
 
+function orderGid(orderId) {
+  const raw = String(orderId || '').trim();
+  if (raw.startsWith('gid://shopify/Order/')) return raw;
+  const clean = raw.replace(/\D/g, '');
+  if (!clean) throw new Error('Commande introuvable.');
+  return `gid://shopify/Order/${clean}`;
+}
+
 async function getAdminSession() {
   if (config.adminAccessToken) {
     return {
@@ -133,6 +141,53 @@ export async function setCustomerPoints(customerId, { points, lifetimePoints, ti
   const errors = data.metafieldsSet.userErrors;
   if (errors.length) throw new Error(errors.map((error) => error.message).join(', '));
   return data.metafieldsSet.metafields;
+}
+
+export async function getOrderPointsLedger(orderId) {
+  const data = await adminGraphql(
+    `#graphql
+    query RetroPointsOrderLedger($id: ID!, $namespace: String!, $key: String!) {
+      order(id: $id) {
+        id
+        ledger: metafield(namespace: $namespace, key: $key) { value }
+      }
+    }`,
+    { id: orderGid(orderId), namespace: 'retroparty', key: 'points_ledger' }
+  );
+
+  if (!data.order) throw new Error('Commande introuvable.');
+  if (!data.order.ledger?.value) return null;
+
+  try {
+    return JSON.parse(data.order.ledger.value);
+  } catch {
+    throw new Error('Journal RetroPoints de commande invalide.');
+  }
+}
+
+export async function setOrderPointsLedger(orderId, ledger) {
+  const data = await adminGraphql(
+    `#graphql
+    mutation SetRetroPointsOrderLedger($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields { id key value }
+        userErrors { field message code }
+      }
+    }`,
+    {
+      metafields: [{
+        ownerId: orderGid(orderId),
+        namespace: 'retroparty',
+        key: 'points_ledger',
+        type: 'json',
+        value: JSON.stringify(ledger)
+      }]
+    }
+  );
+
+  const errors = data.metafieldsSet.userErrors;
+  if (errors.length) throw new Error(errors.map((error) => error.message).join(', '));
+  return data.metafieldsSet.metafields[0];
 }
 
 export async function createCustomerMetafieldDefinitions() {

@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { assertConfig, config } from './config.js';
 import {
@@ -46,12 +47,14 @@ import {
   createRetroPointsDiscount,
   deleteRetroPointsDiscount,
   getCustomerPoints,
+  getOrderPointsLedger,
+  setOrderPointsLedger,
   setCustomerPoints
 } from './shopify-admin.js';
 
 assertConfig();
 
-export const APP_VERSION = '2026-08-01-discount-release-fix';
+export const APP_VERSION = '2026-08-02-order-ledger-idempotency-fix';
 export const app = express();
 const rateBuckets = new Map();
 const processingOrderIds = new Set();
@@ -239,6 +242,23 @@ app.post('/webhooks/orders-paid', express.raw({ type: 'application/json', limit:
   processingOrderIds.add(orderId);
 
   try {
+    const durableLedger = await getOrderPointsLedger(orderId);
+    if (durableLedger?.status === 'credited') {
+      return res.status(200).send('Already processed');
+    }
+    if (durableLedger?.status === 'crediting') {
+      await withCustomerLock(durableLedger.customerId, async () => {
+        const current = await getCustomerPoints(durableLedger.customerId);
+        const alreadyApplied = current.points === Number(durableLedger.pointsAfter)
+          && current.lifetimePoints === Number(durableLedger.lifetimePointsAfter);
+        if (!alreadyApplied) {
+          throw new Error('Cette commande est deja en cours de credit RetroPoints. Verification manuelle requise.');
+        }
+        await setOrderPointsLedger(orderId, { ...durableLedger, status: 'credited', creditedAt: new Date().toISOString() });
+      });
+      return res.status(200).send('Credit reconciled');
+    }
+
     const processing = await startOrderProcessing(orderId, {
       orderName: order.name || '',
       customerId,
@@ -263,11 +283,39 @@ app.post('/webhooks/orders-paid', express.raw({ type: 'application/json', limit:
 
       const newPoints = Math.max(0, current.points - pointsUsed) + earnedPoints;
       const newLifetime = current.lifetimePoints + earnedPoints;
+      const existingLedger = await getOrderPointsLedger(orderId);
+
+      if (existingLedger?.status === 'credited') return;
+      if (existingLedger?.status === 'crediting') {
+        const alreadyApplied = current.points === Number(existingLedger.pointsAfter)
+          && current.lifetimePoints === Number(existingLedger.lifetimePointsAfter);
+        if (alreadyApplied) {
+          await setOrderPointsLedger(orderId, { ...existingLedger, status: 'credited', creditedAt: new Date().toISOString() });
+          return;
+        }
+        throw new Error('Cette commande est deja en cours de credit RetroPoints. Verification manuelle requise.');
+      }
+
+      const ledger = {
+        version: 1,
+        status: 'crediting',
+        operationId: crypto.randomUUID(),
+        customerId,
+        earnedPoints,
+        pointsUsed,
+        pointsBefore: current.points,
+        pointsAfter: newPoints,
+        lifetimePointsBefore: current.lifetimePoints,
+        lifetimePointsAfter: newLifetime,
+        createdAt: new Date().toISOString()
+      };
+      await setOrderPointsLedger(orderId, ledger);
       await setCustomerPoints(customerId, {
         points: newPoints,
         lifetimePoints: newLifetime,
         tier: tierFromLifetimePoints(newLifetime)
       });
+      await setOrderPointsLedger(orderId, { ...ledger, status: 'credited', creditedAt: new Date().toISOString() });
       await markOrderPointsUpdated(orderId, { pointsBefore: current.points, pointsAfter: newPoints, earnedPoints, pointsUsed });
 
       if (redemption && pointsUsed > 0) {

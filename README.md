@@ -130,6 +130,15 @@ Le code Shopify applique ces contraintes dans `combinesWith`. Le champ `existing
 
 Les webhooks doivent être configurés avec leur signature Shopify et ne sont jamais accessibles depuis le navigateur.
 
+## Durable order ledger
+
+Every `orders/paid` webhook writes a `retroparty.points_ledger` JSON metafield on the Shopify order before crediting the customer. The ledger states are `crediting` and `credited`.
+
+- A later webhook delivery for an order in `credited` is ignored.
+- If a deployment interrupts the credit, `crediting` is reconciled without granting points a second time.
+- `write_orders` is mandatory in the app scopes. After deploying this version, authorize the app again through `/auth/install` so Shopify grants the new scope.
+
+This protects the program against the common Render restart / Shopify webhook retry scenario. The existing JSON database remains suitable for one Render instance; PostgreSQL is still required before running multiple instances.
 ## Tests
 
 ```bash
@@ -156,7 +165,7 @@ Réponse de santé attendue :
 ```json
 {
   "ok": true,
-  "version": "2026-08-01-discount-release-fix",
+  "version": "2026-08-02-order-ledger-idempotency-fix",
   "rules": {
     "pointsPerEuro": 5,
     "pointsPerEuroDiscount": 100,
@@ -172,6 +181,7 @@ Variables existantes :
 
 - `SHOPIFY_SHOP`
 - `SHOPIFY_API_VERSION`
+- `SHOPIFY_SCOPES=write_app_proxy,read_customers,write_customers,read_discounts,write_discounts,read_orders,write_orders`
 - `SHOPIFY_CLIENT_ID`
 - `SHOPIFY_CLIENT_SECRET`
 - `SHOPIFY_APP_SECRET`
