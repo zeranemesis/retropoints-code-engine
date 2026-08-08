@@ -24,6 +24,16 @@ function sign(url) {
   return parsed.toString();
 }
 
+function signOAuth(url) {
+  const parsed = new URL(url);
+  const message = [...parsed.searchParams.entries()]
+    .filter(([key]) => key !== 'hmac')
+    .sort(([a, av], [b, bv]) => a.localeCompare(b) || av.localeCompare(bv))
+    .map(([key, value]) => key + '=' + value).join('&');
+  parsed.searchParams.set('hmac', crypto.createHmac('sha256', config.appSecret).update(message).digest('hex'));
+  return parsed.toString();
+}
+
 function request(originalUrl) {
   const parsed = new URL(originalUrl);
   return {
@@ -51,6 +61,17 @@ test('signature invalide, timestamp expire et client absent refuses', () => {
   assert.throws(() => security.authenticateProxyRequest(request(valid + '&timestamp=' + now() + '&logged_in_customer_id=123')));
   assert.throws(() => security.authenticateProxyRequest(request(sign(valid + '&timestamp=' + (now() - 999) + '&logged_in_customer_id=123'))));
   assert.throws(() => security.authenticateProxyRequest(request(sign(valid + '&timestamp=' + now()))));
+});
+
+test('HMAC OAuth valide puis invalide si le retour est modifie', () => {
+  const callback = signOAuth(
+    'https://retropoints-code-engine.onrender.com/auth/callback?code=oauth-code-123&host=YWRtaW4uc2hvcGlmeS5jb20&shop=' + config.shop + '&state=install-state-123&timestamp=' + now()
+  );
+  assert.equal(security.verifyOAuthHmac(request(callback)), true);
+
+  const altered = new URL(callback);
+  altered.searchParams.set('code', 'oauth-code-modified');
+  assert.equal(security.verifyOAuthHmac(request(altered.toString())), false);
 });
 
 test('calcul 100 euros = 500 points = 5 euros', () => {
