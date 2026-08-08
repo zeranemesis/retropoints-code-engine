@@ -165,7 +165,7 @@ Réponse de santé attendue :
 ```json
 {
   "ok": true,
-  "version": "2026-08-02-order-ledger-idempotency-fix",
+  "version": "2026-08-08-oauth-hmac-fix",
   "rules": {
     "pointsPerEuro": 5,
     "pointsPerEuroDiscount": 100,
