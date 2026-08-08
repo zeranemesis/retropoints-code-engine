@@ -54,7 +54,7 @@ import {
 
 assertConfig();
 
-export const APP_VERSION = '2026-08-02-order-ledger-idempotency-fix';
+export const APP_VERSION = '2026-08-08-oauth-hmac-fix';
 export const app = express();
 const rateBuckets = new Map();
 const processingOrderIds = new Set();

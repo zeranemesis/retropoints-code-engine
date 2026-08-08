@@ -7,12 +7,12 @@ function safeCompare(a, b) {
   return aBuffer.length === bBuffer.length && crypto.timingSafeEqual(aBuffer, bBuffer);
 }
 
-function signedMessage(url, excludedKey) {
+function signedMessage(url, excludedKey, separator = '') {
   return [...url.searchParams.entries()]
     .filter(([key]) => key !== excludedKey)
     .sort(([a, av], [b, bv]) => a.localeCompare(b) || av.localeCompare(bv))
     .map(([key, value]) => key + '=' + value)
-    .join('');
+    .join(separator);
 }
 
 function normalizeCustomerId(value) {
@@ -104,7 +104,11 @@ export function verifyOAuthHmac(req) {
   const url = new URL(req.originalUrl, 'https://' + (req.headers.host || config.shop || 'localhost'));
   const hmac = url.searchParams.get('hmac');
   if (!hmac || !config.appSecret) return false;
-  const computed = crypto.createHmac('sha256', config.appSecret).update(signedMessage(url, 'hmac')).digest('hex');
+  // OAuth uses a conventional sorted query string. App Proxy uses the same
+  // fields concatenated without separators, so its verification stays above.
+  const computed = crypto.createHmac('sha256', config.appSecret)
+    .update(signedMessage(url, 'hmac', '&'))
+    .digest('hex');
   return safeCompare(computed, hmac);
 }
 
